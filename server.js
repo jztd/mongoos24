@@ -1,7 +1,7 @@
 const express = require('express');
 const sqlite3 = require('sqlite3');
 const fetch = require('node-fetch');
-const PORT = 5000;
+const PORT = 5001;
 const categoriesApi = "https://services.runescape.com/m=itemdb_rs/api/catalogue/items.json?";
 const createTableSQL = "\
                         CREATE TABLE IF NOT EXISTS item(\
@@ -62,11 +62,12 @@ getCategory = (category) => {
 
 getAllTheItems = () => {
     for (let i = 0; i < 38; i++) {
-        getCategory(i);
+        setTimeout(() => { getCategory(i) }, 27000 * i);
     }
 }
 
-getAllTheItems();
+
+//getAllTheItems();
 
 app.get('/', (req, res) => {
     res.send('GOTEM!');
@@ -81,16 +82,13 @@ app.get('/item', (req, res) => {
 // localhost:5000/getNames
 app.get('/allNames', (req, res) => {
     database.all(`SELECT DISTINCT name FROM item ORDER BY name`, (error, rows) => {
-            if(rows.length !== 0) {
-                res.send(JSON.stringify(rows));
-            } else {
-                getAllTheItems();
-                database.all(`SELECT DISTINCT name FROM item ORDER BY name`, (error, rows) => {
-                    res.send(JSON.stringify(rows));
-                });
-            }
+        if (rows.length !== 0) {
+            res.send(JSON.stringify(rows.reduce((nameList, row) => {
+                nameList.push(row.name);
+                return nameList;
+            }, [])));
         }
-    );
+    });
 });
 
 app.listen(PORT, () => console.log(`running on port ${PORT}`) );
