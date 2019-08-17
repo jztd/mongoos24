@@ -3,58 +3,95 @@ const sqlite3 = require('sqlite3');
 const fetch = require('node-fetch');
 const PORT = 5000;
 const categoriesApi = "https://services.runescape.com/m=itemdb_rs/api/catalogue/items.json?";
-
-var app = express();
+const createTableSQL = "\
+                        CREATE TABLE IF NOT EXISTS item(\
+                        id INTEGER PRIMARY KEY,\
+                        name VARCHAR(255),\
+                        description TEXT,\
+                        type VARCHAR(255),\
+                        icon TEXT\
+                        )";
+const insertItemSQL = "INSERT INTO item (id, name, description, type, icon) VALUES ";
+let app = express();
 
 let database = new sqlite3.Database('./items.db', (error) => {
     if(error) {
         console.log('Yo there was an error connecting to the database, you probably want to set that up first');
     }
-    
+    database.run(createTableSQL);
     console.log('connected to database');
 });
 
 handlePageResponse = (page) => {
-    //console.log(page);
+    if (!page.items.length) {
+        return;
+    }
+
+    let itemStrings = page.items.reduce((itemList, item) => {
+        itemList.push(`(${item.id.toString()}, "${item.name.toString()}", "${item.description.toString()}", "${item.type.toString()}", "${item.icon_large.toString()}")`);
+        return itemList;
+    }, []);
+
+    let insertStatment = insertItemSQL + itemStrings.join(',');
+    
+    database.run(insertStatment, (error) => {
+        if (error) {
+            console.log("SQL ERROR " + error);
+        }
+        console.log(`inserted ${itemStrings.length} items`);
+    });
+
 }
 getPage = (category, letter, pageNum) => {
-    console.log(categoriesApi + `category=${category}&alpha=${letter}&page=${pageNum}`);
-    fetch(categoriesApi + `category=${category}&alpha=${letter}&page=${pageNum}`)
-        .then( (response) => {
-            response.json()
-                .then((page) => {
-                    console.log(`in response ${page.items.length}`);
-                    handlePageResponse(page);
-                    if(page.items.length === 12 && page.items.length) {
-                        console.log("getting another page");
-                        getPage(category, letter, pageNum + 1);
-                    } 
-                })
-                .catch((error) => { console.log(error)})
-        }
-        )
-        .catch((error) => {console.log(error)});
- // get a single page and parse it, call yourselve recursivly
+    return new Promise((resolve, reject) => {
+        fetch(categoriesApi + `category=${category}&alpha=${letter}&page=${pageNum}`)
+            .then((response) => {
+                response.json()
+                    .then((page) => {
+                        handlePageResponse(page);
+                        if (page.items.length === 12) {
+                            getPage(category, letter, pageNum + 1);
+                        }
+                        resolve();
+                    })
+                    .catch(() => { console.log("JSON Error No Data at endpoint This is probably expected") })
+            })
+            .catch((error) => { console.log(error); resolve(); });
+    });
 }
 
 getCategory = (category) => {
-    // call getPage for each letter
-    // i was lazy so this is looping over the char values of a-z it's probably slow idc this whole thing is slow
-    for(let i = 97; i <= 97 ; i++) {
-        getPage(category, String.fromCharCode(i), 1);
-    }
+    
+    return new Promise((resolve, reject) => {
+        let responses = [];
+
+        for (let i = 97; i <= 122; i++) {
+            responses.push(getPage(category, String.fromCharCode(i), 1));
+        }
+
+        Promise.all(responses).then(() => {
+            console.log("category " + category + "resolving");
+            return resolve();
+        });
+
+    });
 }
 
-getAllTheItems = () => {
-    console.log('Building item database');
-    console.log('You might want to go do something else for awhile');
-    console.log('seriously this probably takes 30 minutes');
+getAllTheItems = (category = 0) => {
 
-    for(let i = 0; i <= 0; i++) {
-        getCategory(i);
-    }
+    getCategory(category).then(() => {
+        if (category >= 37) {
+            return;
+        }
+        getCategory(category + 1);
+    }).catch(error => console.log(error));
 
+
+    console.log("GOT ALL THE ITEMS");
 }
+
+
+
 getAllTheItems();
 
 app.get('/', (req, res) => {
@@ -67,6 +104,7 @@ app.get('/item', (req, res) => {
     res.send('got em!');
 });
 
+// localhost:5000/getNames
 app.get('/allNames', (req, res) => {
     database.all(`SELECT DISTINCT name FROM item ORDER BY name`, (error, rows) => {
             if(rows.length !== 0) {
