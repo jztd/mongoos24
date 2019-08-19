@@ -74,9 +74,10 @@ app.get('/', (req, res) => {
 });
 
 app.get('/item', (req, res) => {
-    console.log('got a request for item');
-    console.log(req.query);
-    res.send('got em!');
+    database.run(`SELECT name, description, type, icon, id FROM item WHERE name = ${req.query.name}`, (error, rows) => {
+        console.log(rows);
+        res.send(rows);
+    });
 });
 
 // localhost:5000/getNames
