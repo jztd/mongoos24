@@ -74,9 +74,13 @@ app.get('/', (req, res) => {
 });
 
 app.get('/item', (req, res) => {
-    database.run(`SELECT name, description, type, icon, id FROM item WHERE name = ${req.query.name}`, (error, rows) => {
-        console.log(rows);
-        res.send(rows);
+    let itemSelect = `SELECT name, description, type, icon, id FROM item WHERE name = "${unescape(req.query.name)}" COLLATE NOCASE;`;
+    database.all(itemSelect, (error, rows) => {
+        if(rows && rows.length > 0) {
+            res.send(JSON.stringify(rows[0]));
+        } else {
+            res.send("could not find item");
+        }
     });
 });
 
