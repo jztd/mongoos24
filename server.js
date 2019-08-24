@@ -85,9 +85,9 @@ handlePageResponse = (page) => {
  getPrice = (idList, index) => {
      fetch(graphApi + `${idList[index]}` + '.json').then(response => response.json()).then(result => {
          handlePriceResponse(result, idList[index]);
-         getPrice(idList, index+1);
+         getPrice(idList, index++);
          return;
-     })
+     });
  }
 
  getAllThePrices = () => {
