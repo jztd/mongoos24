@@ -3,6 +3,7 @@ const sqlite3 = require('sqlite3');
 const fetch = require('node-fetch');
 const PORT = 5001;
 const categoriesApi = "https://services.runescape.com/m=itemdb_rs/api/catalogue/items.json?";
+const graphApi = "http://services.runescape.com/m=itemdb_rs/api/graph/";
 const createTableSQL = "\
                         CREATE TABLE IF NOT EXISTS item(\
                         id INTEGER PRIMARY KEY,\
@@ -11,7 +12,16 @@ const createTableSQL = "\
                         type VARCHAR(255),\
                         icon TEXT\
                         )";
+const createPriceTableSQL = "\
+                             CREATE TABLE IF NOT EXISTS item(\
+                             id INTEGER,\
+                             date INTEGER,\
+                             daily INTEGER,\
+                             average INTEGER,\
+                             PRIMARY KEY (id, date)\
+                             )";
 const insertItemSQL = "INSERT INTO item (id, name, description, type, icon) VALUES ";
+const insertPriceSQL = "INSERT INTO item (id, date, daily, average) VALUES ";
 let app = express();
 
 let database = new sqlite3.Database('./items.db', (error) => {
@@ -22,8 +32,16 @@ let database = new sqlite3.Database('./items.db', (error) => {
     console.log('connected to database');
 });
 
+let priceEntry = new sqlite3.Database('./prices.db', (error) => {
+    if (error) {
+        console.log("Dude, where's my database?");
+    }
+    priceEntry.run(createPriceTableSQL);
+    console.log('connected to price database');
+});
+
 handlePageResponse = (page) => {
-    if (!page.items || !page.items.length) {
+    if (!page.daily || !page.items.length) {
         return;
     }
 
@@ -41,6 +59,44 @@ handlePageResponse = (page) => {
     });
 
  }
+
+ handlePriceResponse = (pricePage, id) => {
+     if (!pricePage) {
+         return;
+     }
+
+     let dailyKeys = Object.keys(pricePage.daily);
+     let timeStrings = dailyKeys.reduce((list, key) => {
+         list.push(`(${id}, ${parseInt(key)}, ${pricePage.daily[key]}, ${pricePage.average[key]})`);
+         return list;
+     }, []);
+     
+     let insertStatment = insertPriceSQL + timeStrings.join(',');
+     //console.log(insertPriceSQL + timeStrings.join(','));
+
+     priceEntry.run(insertStatment, (error) => {
+         if (error) {
+             console.log("SQL ERROR" + error);
+         }
+     });
+
+ }
+
+ getPrice = (idList, index) => {
+     fetch(graphApi + `${idList[index]}` + '.json').then(response => response.json()).then(result => {
+         handlePriceResponse(result, idList[index]);
+         getPrice(idList, index+1);
+         return;
+     })
+ }
+
+ getAllThePrices = () => {
+     //GRAB ID'S FROM ITEM DATABASE HERE
+     //let ids = ......
+     getPrice(ids, 0);
+ }
+
+ //getAllThePrices();
 
 getPage = (category, letter, pageNum) => {
     fetch(categoriesApi + `category=${category}&alpha=${letter}&page=${pageNum}`).then((response) => response.json()).then((result) => {
@@ -93,6 +149,15 @@ app.get('/allNames', (req, res) => {
                 return nameList;
             }, [])));
         }
+    });
+});
+
+//Gotta grab that pricing information!
+//Should ask jztd about the purpose of the unescape() expression
+app.get('/price', (req, res) => {
+    let itemSelect = `SELECT id, date, daily, average FROM item WHERE id = ${unescape(req.query.id)};`;
+    priceEntry.all(itemSelect, (error, rows) => {
+        res.send(JSON.stringify(rows));
     });
 });
 
