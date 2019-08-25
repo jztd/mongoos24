@@ -1,8 +1,24 @@
 const sqlite3 = require('sqlite3');
 const fetch = require('node-fetch');
+const Bottleneck = require('bottleneck');
 const categoriesApi = "https://services.runescape.com/m=itemdb_rs/api/catalogue/items.json?";
 const graphApi = "http://services.runescape.com/m=itemdb_rs/api/graph/";
+let limiter = new Bottleneck({
+    maxConcurrent: 1,
+    minTime: 500
+});
 
+limiter.on("retry", () => {
+    console.log('Retrying');
+});
+
+limiter.on("failed", async(error, jobInfo) => {
+    const id = jobInfo.options.id;
+    console.warn(`Job ${id} failed: ${error}`);
+    
+    return 5000;
+    
+});
 
 const createItemTableSQL = "\
                         CREATE TABLE IF NOT EXISTS item(\
@@ -25,6 +41,7 @@ const createPriceEntryTableSQL = "\
 
 const insertPriceSQL = "INSERT INTO priceEntry (id, date, daily, average) VALUES ";
 const insertItemSQL = "INSERT INTO item (id, name, description, type, icon) VALUES ";
+
 
 let database =  new sqlite3.Database('./item.db', (error) => {
     if(error) {
@@ -97,7 +114,7 @@ handlePriceResponse = async(pricePage,id) => {
     
     let insertStatment = insertPriceSQL + priceEntries.join(',');
 
-    await database.run(insertStatment, (error) => {
+    database.run(insertStatment, (error) => {
         if (error) {
             console.log(error);
             return;
@@ -111,8 +128,8 @@ handlePriceResponse = async(pricePage,id) => {
 
 const getPrice = async(id) => {
     let pricePage = await fetch(`${graphApi+id}.json`)
-        .then((response => response.json()))
-        .catch(async() => {console.log("retrying"); await getPrice(id); return;});
+        .then(response => response.json() )
+        .catch(error => {throw new Error(error);});
 
     await handlePriceResponse(pricePage, id);
 
@@ -120,15 +137,13 @@ const getPrice = async(id) => {
 }
 
 const populateItemPrices = async() => {
-    database.all('SELECT id FROM item', async(error,rows) => {
+    database.all('SELECT id FROM item ', async(error,rows) => {
         if(error) {
-            console.log('ERROR GETTING ITEM IDS');
             console.log(error);
             return;
         }
         for(let row of rows) {
-            console.log(`-------- GETTING PRICES FOR ${row.id}---------`);
-            await getPrice(row.id);
+            limiter.schedule(() => getPrice(row.id));
         }
         return;
     });
