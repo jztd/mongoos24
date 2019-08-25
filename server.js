@@ -6,7 +6,7 @@ const PORT = 5001;
 
 let app = express();
 
-let database = new sqlite3.Database('./items.db', (error) => {
+let database = new sqlite3.Database('./item.db', (error) => {
     if(error) {
         console.log('Problem initilizing database, run databaseBuilder first');
     }
@@ -15,6 +15,7 @@ let database = new sqlite3.Database('./items.db', (error) => {
 
 
 app.get('/item', (req, res) => {
+    console.log(req.query.name);
     let itemSelect = `SELECT name, description, type, icon, id FROM item WHERE name = ? COLLATE NOCASE;`;
     database.all(itemSelect,[req.query.name], (error, rows) => {
         if(rows && rows.length > 0) {
@@ -37,7 +38,7 @@ app.get('/allNames', (req, res) => {
 });
 
 app.get('/price', (req, res) => {
-    let itemSelect = `SELECT id, date, daily, average FROM item WHERE id = ?;`;
+    let itemSelect = `SELECT id, date, daily, average FROM priceEntry WHERE id = ?;`;
     database.all(itemSelect, [req.query.id], (error, rows) => {
         res.send(JSON.stringify(rows));
     });
