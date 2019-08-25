@@ -38,7 +38,7 @@ app.get('/allNames', (req, res) => {
 
 app.get('/price', (req, res) => {
     let itemSelect = `SELECT id, date, daily, average FROM item WHERE id = ?;`;
-    priceEntry.all(itemSelect, [req.query.id], (error, rows) => {
+    database.all(itemSelect, [req.query.id], (error, rows) => {
         res.send(JSON.stringify(rows));
     });
 });
